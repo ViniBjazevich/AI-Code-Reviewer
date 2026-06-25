@@ -30,43 +30,67 @@ npm install
 
 ### 2. Configure environment variables
 
-Copy `.env.local` (already present with empty placeholders) and fill in:
+Fill in `.env.local` (already present, gitignored via `.env*`):
 
-| Variable | Description |
-| --- | --- |
-| `GITHUB_APP_ID` | GitHub App ID (if using a GitHub App for installation-based access) |
-| `GITHUB_APP_PRIVATE_KEY` | GitHub App private key |
-| `GITHUB_WEBHOOK_SECRET` | Shared secret used to verify `x-hub-signature-256` on incoming webhooks |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth App credentials, used by NextAuth for sign-in |
-| `ANTHROPIC_API_KEY` | API key for Claude |
-| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` | Supabase project credentials |
-| `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` | Inngest credentials |
-| `NEXTAUTH_SECRET` | Random secret for NextAuth session encryption |
-| `NEXTAUTH_URL` | Base URL of the app, e.g. `http://localhost:3000` |
-
-None of these are committed — `.env*` is gitignored.
+| Variable | Required for | Notes |
+| --- | --- | --- |
+| `SUPABASE_URL` | Everything | Project URL from Supabase Project Settings → API |
+| `SUPABASE_PUBLISHABLE_KEY` | Everything | The `anon`/"Publishable key" from the same page |
+| `SUPABASE_SECRET_KEY` | Everything | The `service_role`/"Secret key" — bypasses RLS, server-only |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Sign-in | From a GitHub OAuth App (not a GitHub App) — see step 4 |
+| `NEXTAUTH_SECRET` | Sign-in | Any random string, e.g. `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | Sign-in | `http://localhost:3000` for local dev |
+| `ANTHROPIC_API_KEY` | AI reviews | From [console.anthropic.com](https://console.anthropic.com) |
+| `GITHUB_WEBHOOK_SECRET` | Webhook-triggered reviews | Any random string, e.g. `openssl rand -hex 20` |
+| `INNGEST_DEV` | Local background jobs | Set to `1` so the SDK runs in local dev mode instead of expecting cloud signing keys |
 
 ### 3. Set up the database
 
-Run the migration in [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql) against your Supabase project (via the SQL editor or the Supabase CLI). It creates `users`, `installations`, `pull_requests`, and `review_comments`, with row-level security enabled — all reads/writes go through the server using the service role key.
+Run the migration in [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql) against your Supabase project (SQL Editor → paste → Run). It creates `users`, `installations`, `pull_requests`, and `review_comments`, with row-level security enabled — all reads/writes go through the server using the secret key.
 
-### 4. Run the dev server
+### 4. Create a GitHub OAuth App
+
+GitHub → Settings → Developer settings → OAuth Apps → New OAuth App:
+- Homepage URL: `http://localhost:3000`
+- Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
+
+Copy the Client ID into `GITHUB_CLIENT_ID`, generate a secret into `GITHUB_CLIENT_SECRET`.
+
+### 5. Run the app
 
 ```bash
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000).
+Visit [http://localhost:3000](http://localhost:3000), click "Connect GitHub", and use the dashboard to connect a repo. This is enough to test sign-in and the dashboard end to end.
 
-### 5. Wire up the GitHub webhook
+### 6. (Optional) Trigger real reviews from a live PR
 
-Point your GitHub App/OAuth App's webhook at `/api/webhooks/github` (use a tool like `ngrok` or the Inngest dev server for local testing), and set the Inngest app's serve endpoint to `/api/inngest`.
+To have an actual GitHub PR fire a review, three more processes need to run alongside `npm run dev`:
+
+```bash
+# Terminal 2 — runs the background job locally and gives you a dashboard at http://127.0.0.1:8288
+npx inngest-cli@latest dev
+
+# Terminal 3 — exposes localhost:3000 publicly so GitHub's webhook can reach it
+ngrok http 3000
+```
+
+Then, on the repo you connected:
+1. Settings → Webhooks → Add webhook
+2. Payload URL: `https://<your-ngrok-id>.ngrok-free.dev/api/webhooks/github`
+3. Content type: `application/json`
+4. Secret: same value as `GITHUB_WEBHOOK_SECRET`
+5. Events: at minimum "Pull requests"
+
+Opening or pushing to a PR on that repo will now flow through the webhook → Inngest → Claude → back to GitHub as inline comments, and show up under "Recent pull requests" in the dashboard.
 
 ## Project Structure
 
 ```
 app/
   page.tsx                       Landing page
+  connect-github-button.tsx      Client button that kicks off the GitHub OAuth flow
   dashboard/                     Authenticated dashboard (repos + PR list)
   dashboard/pr/[id]/             PR detail page with scores + comments
   api/auth/[...nextauth]/        NextAuth route
@@ -75,7 +99,7 @@ app/
   api/repos/                     List/connect GitHub repos
   api/installations/[id]/        Enable/disable a connected repo
 lib/
-  supabase.ts                    Browser + server Supabase clients
+  supabase.ts                    Server-only Supabase client (secret key, bypasses RLS)
   inngest.ts                     Inngest client
   functions/review-pr.ts         The AI review background job
   score.ts                       Score-to-color helper

@@ -46,8 +46,8 @@ export default function RepoToggle({ installationId, initialEnabled }: RepoToggl
       aria-pressed={enabled}
     >
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-          enabled ? "translate-x-5" : "translate-x-0.5"
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+          enabled ? "translate-x-5" : "translate-x-0"
         }`}
       />
     </button>

@@ -19,15 +19,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ error: "enabled must be a boolean" }, { status: 400 });
     }
 
-    const { error } = await supabaseServer
+    const { data, error } = await supabaseServer
       .from("installations")
       .update({ enabled })
       .eq("id", params.id)
-      .eq("user_id", session.user.id);
+      .eq("user_id", session.user.id)
+      .select();
 
     if (error) {
       console.error("Failed to update installation:", error);
       return NextResponse.json({ error: "Failed to update installation" }, { status: 500 });
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "Installation not found" }, { status: 404 });
     }
 
     return NextResponse.json({ enabled });

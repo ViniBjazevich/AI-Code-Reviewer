@@ -64,6 +64,12 @@ function chunkDiff(patch: string): string[] {
   return chunks;
 }
 
+/** Strips a ```json ... ``` (or bare ```) markdown code fence Claude sometimes wraps its JSON in. */
+function stripMarkdownCodeFence(text: string): string {
+  const fenced = text.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  return fenced ? fenced[1] : text;
+}
+
 function buildUserPrompt(filename: string, chunk: string): string {
   return `Review this code diff from the file ${filename}.
 
@@ -107,7 +113,7 @@ async function reviewChunk(
       throw new Error("No text content in Anthropic response");
     }
 
-    return JSON.parse(textBlock.text) as AIReviewResult;
+    return JSON.parse(stripMarkdownCodeFence(textBlock.text)) as AIReviewResult;
   } catch (error) {
     console.error(`Failed to review chunk for ${filename}:`, error);
     return { comments: [], fileScore: 100 };
