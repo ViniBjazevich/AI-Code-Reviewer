@@ -16,6 +16,15 @@ const SKIPPED_FILE_PATTERNS = [
 
 const MAX_CHUNK_CHARS = 24000;
 
+const VALID_SEVERITIES = new Set<Severity>(["critical", "warning", "suggestion"]);
+const VALID_CATEGORIES = new Set<Category>([
+  "security",
+  "performance",
+  "readability",
+  "correctness",
+  "testing",
+]);
+
 const SYSTEM_PROMPT =
   "You are a senior software engineer performing a thorough code review. Analyze the provided diff carefully and return ONLY valid JSON with no markdown, no explanation, just the raw JSON object.";
 
@@ -135,7 +144,18 @@ interface ScoredComment {
  * the review back to GitHub.
  */
 export const reviewPr = inngest.createFunction(
-  { id: "review-pr", retries: 2, triggers: [{ event: "github/pr.opened" }] },
+  {
+    id: "review-pr",
+    retries: 2,
+    triggers: [{ event: "github/pr.opened" }],
+    onFailure: async ({ event }) => {
+      const { pullRequestId } = event.data.event.data;
+      await supabaseServer
+        .from("pull_requests")
+        .update({ status: "failed" })
+        .eq("id", pullRequestId);
+    },
+  },
   async ({ event, step }) => {
     const {
       repoFullName,
@@ -207,6 +227,14 @@ export const reviewPr = inngest.createFunction(
       for (const result of fileResults) {
         fileScores.push(result.fileScore);
         for (const comment of result.comments) {
+          if (!VALID_SEVERITIES.has(comment.severity) || !VALID_CATEGORIES.has(comment.category)) {
+            console.error(
+              `Dropping comment with invalid severity/category from Claude for ${file.filename}:`,
+              comment.severity,
+              comment.category
+            );
+            continue;
+          }
           allComments.push({ filename: file.filename, ...comment });
         }
       }

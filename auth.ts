@@ -12,6 +12,14 @@ export const authOptions: NextAuthOptions = {
     GitHubProvider({
       clientId: process.env.GITHUB_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+      authorization: {
+        params: {
+          // NextAuth's default scope is read-only ("read:user user:email"); the
+          // "repo" scope is required so the stored access token can list a
+          // user's repos and post review comments/reviews back to GitHub.
+          scope: "read:user user:email repo",
+        },
+      },
     }),
   ],
   session: {
