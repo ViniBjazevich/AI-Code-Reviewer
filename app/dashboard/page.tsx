@@ -9,6 +9,7 @@ import type { Installation, PullRequest } from "@/types";
 import SignOutButton from "./sign-out-button";
 import RepoToggle from "./repo-toggle";
 import AddRepoButton from "./add-repo-button";
+import AutoRefresh from "../auto-refresh";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
@@ -45,8 +46,13 @@ export default async function DashboardPage() {
     (installations ?? []).map((installation: Installation) => [installation.id, installation])
   );
 
+  const hasInProgressPullRequest = (pullRequests ?? []).some(
+    (pr: PullRequest) => pr.status === "pending" || pr.status === "reviewing"
+  );
+
   return (
     <div className="flex flex-col flex-1 bg-background">
+      <AutoRefresh enabled={hasInProgressPullRequest} />
       <header className="flex items-center justify-between border-b border-border px-8 py-4">
         <Link href="/" className="text-lg font-semibold tracking-tight">
           AI <span className="text-accent">Code Reviewer</span>

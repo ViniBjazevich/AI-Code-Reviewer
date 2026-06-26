@@ -5,6 +5,7 @@ import { authOptions } from "@/auth";
 import { supabaseServer } from "@/lib/supabase";
 import { scoreColorClass } from "@/lib/score";
 import type { PullRequest, ReviewComment, Severity } from "@/types";
+import AutoRefresh from "../../../auto-refresh";
 
 const SEVERITY_ORDER: Severity[] = ["critical", "warning", "suggestion"];
 
@@ -60,8 +61,11 @@ export default async function PullRequestDetailPage({
     items: ((comments ?? []) as ReviewComment[]).filter((c) => c.severity === severity),
   }));
 
+  const isInProgress = pullRequest.status === "pending" || pullRequest.status === "reviewing";
+
   return (
     <div className="flex flex-col flex-1 bg-background">
+      <AutoRefresh enabled={isInProgress} />
       <header className="border-b border-border px-8 py-4">
         <Link href="/dashboard" className="text-sm text-zinc-500 hover:text-zinc-300">
           ← Back to dashboard
