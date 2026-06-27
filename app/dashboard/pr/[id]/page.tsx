@@ -42,8 +42,9 @@ export default async function PullRequestDetailPage({
 
   const { data: pullRequest } = await supabaseServer
     .from("pull_requests")
-    .select("*")
+    .select("*, installations!inner(user_id)")
     .eq("id", params.id)
+    .eq("installations.user_id", session.user.id)
     .maybeSingle<PullRequest>();
 
   if (!pullRequest) {
@@ -53,7 +54,7 @@ export default async function PullRequestDetailPage({
   const { data: comments } = await supabaseServer
     .from("review_comments")
     .select("*")
-    .eq("pull_request_id", params.id)
+    .eq("pull_request_id", pullRequest.id)
     .order("created_at", { ascending: true });
 
   const commentsBySeverity = SEVERITY_ORDER.map((severity) => ({

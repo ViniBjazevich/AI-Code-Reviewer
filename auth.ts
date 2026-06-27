@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import GitHubProvider from "next-auth/providers/github";
 import { supabaseServer } from "@/lib/supabase";
+import { encryptSecret } from "@/lib/crypto";
 
 /**
  * Shared NextAuth configuration. GitHub is the only provider — on sign in we
@@ -39,7 +40,9 @@ export const authOptions: NextAuthOptions = {
           {
             github_id: githubProfile.id,
             github_username: githubProfile.login,
-            github_access_token: account.access_token,
+            github_access_token: account.access_token
+              ? encryptSecret(account.access_token)
+              : null,
             avatar_url: user.image ?? githubProfile.avatar_url,
           },
           { onConflict: "github_id" }
@@ -67,17 +70,23 @@ export const authOptions: NextAuthOptions = {
             .eq("github_id", githubProfile.id)
             .single();
 
-          if (error) {
-            console.error("Failed to look up Supabase user id:", error);
-          } else if (data) {
-            token.supabaseUserId = data.id;
+          if (error || !data) {
+            // Fail token issuance rather than returning a session with a
+            // GitHub token but no linked Supabase user.
+            throw new Error(`Failed to resolve user identity: ${error?.message}`);
           }
 
+          token.supabaseUserId = data.id;
           token.githubAccessToken = account.access_token;
         }
 
         return token;
       } catch (error) {
+        if (account && profile) {
+          // Sign-in lookup failed — rethrow so NextAuth fails the sign-in
+          // instead of issuing a token with no linked Supabase user.
+          throw error;
+        }
         console.error("Error in jwt callback:", error);
         return token;
       }

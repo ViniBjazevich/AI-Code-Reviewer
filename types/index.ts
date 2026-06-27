@@ -3,9 +3,17 @@ export interface User {
   id: string;
   github_id: number;
   github_username: string;
-  github_access_token: string;
   avatar_url: string | null;
   created_at: string;
+}
+
+/**
+ * Server-only — never serialize this into an API response or client component.
+ * `github_access_token` is encrypted at rest (see lib/crypto.ts) and must be
+ * decrypted with `decryptSecret` before use.
+ */
+export interface UserRecord extends User {
+  github_access_token: string;
 }
 
 /** A repository that has been connected to AI Code Reviewer. */

@@ -10,11 +10,12 @@ const HANDLED_ACTIONS = new Set(["opened", "synchronize", "reopened"]);
  * digest of the raw request body, computed with the webhook secret.
  */
 function verifySignature(rawBody: string, signature: string | null): boolean {
-  if (!signature) {
+  const secret = process.env.GITHUB_WEBHOOK_SECRET;
+
+  if (!signature || !secret) {
     return false;
   }
 
-  const secret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
   const expected = `sha256=${crypto.createHmac("sha256", secret).update(rawBody).digest("hex")}`;
 
   try {

@@ -2,6 +2,7 @@ import { Octokit } from "octokit";
 import Anthropic from "@anthropic-ai/sdk";
 import { inngest } from "@/lib/inngest";
 import { supabaseServer } from "@/lib/supabase";
+import { decryptSecret } from "@/lib/crypto";
 import type { AIReviewResult, Category, Severity } from "@/types";
 
 const SKIPPED_FILE_PATTERNS = [
@@ -28,15 +29,12 @@ const VALID_CATEGORIES = new Set<Category>([
 const SYSTEM_PROMPT =
   "You are a senior software engineer performing a thorough code review. Analyze the provided diff carefully and return ONLY valid JSON with no markdown, no explanation, just the raw JSON object.";
 
-/** Returns true if a changed filename should be skipped from review. */
+
 function shouldSkipFile(filename: string): boolean {
   return SKIPPED_FILE_PATTERNS.some((pattern) => pattern.test(filename));
 }
 
-/**
- * Splits a diff patch into chunks under MAX_CHUNK_CHARS, preferring to break
- * on "@@" hunk boundaries so each chunk stays a coherent set of hunks.
- */
+
 function chunkDiff(patch: string): string[] {
   if (patch.length <= MAX_CHUNK_CHARS) {
     return [patch];
@@ -103,7 +101,7 @@ Return a JSON object with exactly this shape:
 Focus on real issues: bugs, security vulnerabilities, performance problems, unclear logic. Skip nitpicks.`;
 }
 
-/** Calls Claude with a single diff chunk and parses the JSON review result. */
+
 async function reviewChunk(
   anthropic: Anthropic,
   filename: string,
@@ -138,11 +136,7 @@ interface ScoredComment {
   suggestion?: string;
 }
 
-/**
- * Inngest function triggered by "github/pr.opened". Fetches the PR diff,
- * reviews it with Claude in chunks, persists results to Supabase, and posts
- * the review back to GitHub.
- */
+
 export const reviewPr = inngest.createFunction(
   {
     id: "review-pr",
@@ -167,27 +161,31 @@ export const reviewPr = inngest.createFunction(
 
     const [owner, repo] = repoFullName.split("/");
 
-    const { data: installation, error: installationError } = await supabaseServer
-      .from("installations")
-      .select("user_id")
-      .eq("id", installationId)
-      .single();
+    const userId = await step.run("load-installation", async () => {
+      const { data: installation, error: installationError } = await supabaseServer
+        .from("installations")
+        .select("user_id")
+        .eq("id", installationId)
+        .single();
 
-    if (installationError || !installation) {
-      throw new Error(`Failed to load installation ${installationId}: ${installationError?.message}`);
-    }
+      if (installationError || !installation) {
+        throw new Error(`Failed to load installation ${installationId}: ${installationError?.message}`);
+      }
+
+      return installation.user_id as string;
+    });
 
     const { data: user, error: userError } = await supabaseServer
       .from("users")
       .select("github_access_token")
-      .eq("id", installation.user_id)
+      .eq("id", userId)
       .single();
 
-    if (userError || !user) {
+    if (userError || !user || !user.github_access_token) {
       throw new Error(`Failed to load user for installation ${installationId}: ${userError?.message}`);
     }
 
-    const octokit = new Octokit({ auth: user.github_access_token });
+    const octokit = new Octokit({ auth: decryptSecret(user.github_access_token) });
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     await step.run("mark-reviewing", async () => {

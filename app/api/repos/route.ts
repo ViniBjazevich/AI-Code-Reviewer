@@ -49,6 +49,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "repoFullName and repoId are required" }, { status: 400 });
     }
 
+    if (!session.githubAccessToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const [owner, repo] = repoFullName.split("/");
+    const octokit = new Octokit({ auth: session.githubAccessToken });
+
+    try {
+      await octokit.rest.repos.get({ owner, repo });
+    } catch {
+      return NextResponse.json(
+        { error: "You don't have access to that repository on GitHub" },
+        { status: 403 }
+      );
+    }
+
+    const { data: existing } = await supabaseServer
+      .from("installations")
+      .select("user_id")
+      .eq("repo_full_name", repoFullName)
+      .maybeSingle();
+
+    if (existing && existing.user_id !== session.user.id) {
+      return NextResponse.json(
+        { error: "This repository is already connected by another user" },
+        { status: 409 }
+      );
+    }
+
     const { data, error } = await supabaseServer
       .from("installations")
       .upsert(

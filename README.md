@@ -38,6 +38,7 @@ Fill in `.env.local` (already present, gitignored via `.env*`):
 | `SUPABASE_PUBLISHABLE_KEY` | Everything | The `anon`/"Publishable key" from the same page |
 | `SUPABASE_SECRET_KEY` | Everything | The `service_role`/"Secret key" — bypasses RLS, server-only |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Sign-in | From a GitHub OAuth App (not a GitHub App) — see step 4 |
+| `TOKEN_ENCRYPTION_KEY` | Sign-in | A 64-character hex string (32 bytes) used to encrypt stored GitHub access tokens, e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `NEXTAUTH_SECRET` | Sign-in | Any random string, e.g. `openssl rand -base64 32` |
 | `NEXTAUTH_URL` | Sign-in | `http://localhost:3000` for local dev |
 | `ANTHROPIC_API_KEY` | AI reviews | From [console.anthropic.com](https://console.anthropic.com) |
